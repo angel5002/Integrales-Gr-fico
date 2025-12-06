@@ -2,228 +2,228 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 
-# --- 1. CONFIGURACIÓN Y ESTILOS ---
+# --- 1. CONFIGURACIÓN Y ESTILO (SOLIDO) ---
 st.set_page_config(page_title="Calculadora de Integrales", layout="wide")
 
 st.markdown("""
 <style>
-    /* Estilo de Botones para que NO sean blancos ni invisibles */
+    /* Estilo robusto para botones: Gris oscuro, texto blanco, borde visible */
     div.stButton > button {
-        background-color: #2b2d42 !important; 
-        color: #ffffff !important;             
-        border: 1px solid #8d99ae !important;  
-        border-radius: 8px !important;
-        height: 60px !important;               
-        font-size: 22px !important;            
-        font-weight: bold !important;
+        background-color: #262730 !important;
+        color: #ffffff !important;
+        border: 1px solid #4c4c54 !important;
+        border-radius: 6px !important;
+        height: 55px !important;
+        font-size: 20px !important;
+        font-weight: 600 !important;
         margin: 2px !important;
     }
-
-    /* Efecto Hover */
     div.stButton > button:hover {
-        background-color: #ef233c !important; 
-        border-color: white !important;
+        border-color: #ff4b4b !important;
+        color: #ff4b4b !important;
+        background-color: #31333F !important;
+    }
+    div.stButton > button:active {
+        background-color: #ff4b4b !important;
         color: white !important;
     }
-
-    /* Input de texto */
+    /* Input grande y visible */
     .stTextInput > div > div > input {
-        font-size: 1.5rem;
-        background-color: #1a1b26;
-        color: white;
+        font-size: 1.4rem;
+        padding: 10px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Verificación de librería
+# Verificación de librería gráfica
 try:
     import plotly.graph_objects as go
 except ImportError:
-    st.error("⚠️ Error: Falta 'plotly'. Revisa requirements.txt.")
+    st.error("⚠️ Falta 'plotly'. Revisa requirements.txt")
     st.stop()
 
-# --- 2. LÓGICA DE MEMORIA (SOLUCIÓN AL BORRADO) ---
-# Usamos una clave específica 'user_formula' para conectar el input con los botones
-if 'user_formula' not in st.session_state:
-    st.session_state.user_formula = ""
+# --- 2. LÓGICA DE MEMORIA (CORE FIX) ---
+# Usamos 'formula_state' para controlar el texto sin que se borre
+if 'formula_state' not in st.session_state:
+    st.session_state.formula_state = "6 - 0.0006*x"
 
-def agregar(simbolo):
-    """Añade el símbolo al final del texto actual"""
-    st.session_state.user_formula += str(simbolo)
+def btn_click(val):
+    """Callback que añade texto sin romper el estado"""
+    st.session_state.formula_state += str(val)
 
-def limpiar():
-    """Borra todo"""
-    st.session_state.user_formula = ""
+def btn_clear():
+    st.session_state.formula_state = ""
 
-def borrar_uno():
-    """Borra solo el último caracter"""
-    if len(st.session_state.user_formula) > 0:
-        st.session_state.user_formula = st.session_state.user_formula[:-1]
+def btn_delete():
+    st.session_state.formula_state = st.session_state.formula_state[:-1]
 
-# --- 3. INTERFAZ GRÁFICA ---
+# --- 3. INTERFAZ ---
+st.title("∫ Calculadora de Área Bajo la Curva")
 
-st.title("∫ Calculadora de Integrales Definidas")
-st.markdown("Calcula el área bajo la curva de una función $f(x)$.")
+col_calc, col_opts = st.columns([1.5, 1], gap="large")
 
-col_izq, col_der = st.columns([1.5, 1], gap="large")
-
-with col_izq:
+with col_calc:
     st.subheader("1. Función f(x)")
     
-    # INPUT VINCULADO: El valor se alimenta de session_state.user_formula
-    formula_input = st.text_input(
-        "Escribe la función:", 
-        value=st.session_state.user_formula,
-        placeholder="Ej: 6 - 0.0006*x",
-        label_visibility="collapsed",
-        key="input_visual" # Clave temporal para detectar escritura manual
+    # INPUT VINCULADO AL ESTADO
+    # Al escribir aquí, se actualiza 'formula_state' automáticamente gracias al key
+    formula_txt = st.text_input(
+        "Ecuación:", 
+        key="formula_state", 
+        label_visibility="collapsed"
     )
-    
-    # Sincronización: Si el usuario escribe a mano, actualizamos el estado
-    if formula_input != st.session_state.user_formula:
-        st.session_state.user_formula = formula_input
 
-    # --- BOTONERA ---
+    # --- BOTONERA NUMÉRICA Y DE FUNCIONES ---
     # Fila 1
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.button("CLR", on_click=limpiar, use_container_width=True)
-    c2.button("DEL", on_click=borrar_uno, use_container_width=True)
-    c3.button("＋", on_click=agregar, args=(" + ",), use_container_width=True)
-    c4.button("－", on_click=agregar, args=(" - ",), use_container_width=True)
-    c5.button("^", on_click=agregar, args=("**",), use_container_width=True)
+    b1, b2, b3, b4, b5 = st.columns(5)
+    b1.button("CLR", on_click=btn_clear, use_container_width=True)
+    b2.button("DEL", on_click=btn_delete, use_container_width=True)
+    b3.button("(", on_click=btn_click, args=("(",), use_container_width=True)
+    b4.button(")", on_click=btn_click, args=(")",), use_container_width=True)
+    b5.button("^", on_click=btn_click, args=("**",), use_container_width=True)
 
     # Fila 2
-    c6, c7, c8, c9, c10 = st.columns(5)
-    c6.button("x", on_click=agregar, args=("x",), use_container_width=True)
-    c7.button("7", on_click=agregar, args=("7",), use_container_width=True)
-    c8.button("8", on_click=agregar, args=("8",), use_container_width=True)
-    c9.button("9", on_click=agregar, args=("9",), use_container_width=True)
-    c10.button("÷", on_click=agregar, args=(" / ",), use_container_width=True)
+    b6, b7, b8, b9, b10 = st.columns(5)
+    b6.button("7", on_click=btn_click, args=("7",), use_container_width=True)
+    b7.button("8", on_click=btn_click, args=("8",), use_container_width=True)
+    b8.button("9", on_click=btn_click, args=("9",), use_container_width=True)
+    b9.button("÷", on_click=btn_click, args=(" / ",), use_container_width=True)
+    b10.button("√", on_click=btn_click, args=("sqrt(",), use_container_width=True)
 
     # Fila 3
-    c11, c12, c13, c14, c15 = st.columns(5)
-    c11.button("(", on_click=agregar, args=("(",), use_container_width=True)
-    c12.button("4", on_click=agregar, args=("4",), use_container_width=True)
-    c13.button("5", on_click=agregar, args=("5",), use_container_width=True)
-    c14.button("6", on_click=agregar, args=("6",), use_container_width=True)
-    c15.button("×", on_click=agregar, args=(" * ",), use_container_width=True)
+    b11, b12, b13, b14, b15 = st.columns(5)
+    b11.button("4", on_click=btn_click, args=("4",), use_container_width=True)
+    b12.button("5", on_click=btn_click, args=("5",), use_container_width=True)
+    b13.button("6", on_click=btn_click, args=("6",), use_container_width=True)
+    b14.button("×", on_click=btn_click, args=(" * ",), use_container_width=True)
+    b15.button("sin", on_click=btn_click, args=("sin(",), use_container_width=True)
 
     # Fila 4
-    c16, c17, c18, c19, c20 = st.columns(5)
-    c16.button(")", on_click=agregar, args=(")",), use_container_width=True)
-    c17.button("1", on_click=agregar, args=("1",), use_container_width=True)
-    c18.button("2", on_click=agregar, args=("2",), use_container_width=True)
-    c19.button("3", on_click=agregar, args=("3",), use_container_width=True)
-    c20.button("√", on_click=agregar, args=("sqrt(",), use_container_width=True)
+    b16, b17, b18, b19, b20 = st.columns(5)
+    b16.button("1", on_click=btn_click, args=("1",), use_container_width=True)
+    b17.button("2", on_click=btn_click, args=("2",), use_container_width=True)
+    b18.button("3", on_click=btn_click, args=("3",), use_container_width=True)
+    b19.button("－", on_click=btn_click, args=(" - ",), use_container_width=True)
+    b20.button("cos", on_click=btn_click, args=("cos(",), use_container_width=True)
 
-    # Fila 5 (Cero y punto)
-    c21, c22, c23, c24, c25 = st.columns(5)
-    c21.button("0", on_click=agregar, args=("0",), use_container_width=True)
-    c22.button(".", on_click=agregar, args=("."), use_container_width=True)
-    c23.button("sin", on_click=agregar, args=("sin(",), use_container_width=True)
-    c24.button("cos", on_click=agregar, args=("cos(",), use_container_width=True)
-    c25.button("π", on_click=agregar, args=("pi",), use_container_width=True)
+    # Fila 5
+    b21, b22, b23, b24, b25 = st.columns(5)
+    b21.button("0", on_click=btn_click, args=("0",), use_container_width=True)
+    b22.button(".", on_click=btn_click, args=("."), use_container_width=True)
+    b23.button("x", on_click=btn_click, args=("x",), use_container_width=True)
+    b24.button("＋", on_click=btn_click, args=(" + ",), use_container_width=True)
+    b25.button("π", on_click=btn_click, args=("pi",), use_container_width=True)
 
-    # Vista matemática
-    if st.session_state.user_formula:
+    # Vista matemática simple
+    if formula_txt:
         try:
-            tex = st.session_state.user_formula.replace("**", "^").replace("*", "") \
-                               .replace("sqrt", "\\sqrt").replace("sin", "\\sin") \
-                               .replace("cos", "\\cos").replace("pi", "\\pi")
-            st.info("Interpretación:")
-            st.latex(f"f(x) = {tex}")
+            # Renderizado visual limpio
+            nice_tex = formula_txt.replace("**", "^").replace("*", "") \
+                                  .replace("sqrt", "\\sqrt").replace("sin", "\\sin")
+            st.latex(f"f(x) = {nice_tex}")
         except:
             pass
 
-with col_der:
+with col_opts:
     st.subheader("2. Límites de Integración")
     
-    # Contenedor limpio para los límites
     with st.container(border=True):
-        st.markdown("**Intervalo [a, b]**")
-        # Usamos columnas para ponerlos lado a lado
-        l1, l2 = st.columns(2)
-        # Valores por defecto basados en tu imagen (4000 a 6500)
-        lim_a = l1.number_input("Límite Inferior (a)", value=4000.0, step=10.0)
-        lim_b = l2.number_input("Límite Superior (b)", value=6500.0, step=10.0)
+        st.markdown("**Intervalo en el Eje X**")
+        st.caption("Calcularemos el área entre estos dos puntos.")
         
+        c1, c2 = st.columns(2)
+        # Valores por defecto de tu ejemplo (4000 a 6500)
+        lim_a = c1.number_input("Desde (a)", value=4000.0, step=100.0)
+        lim_b = c2.number_input("Hasta (b)", value=6500.0, step=100.0)
+
     st.markdown("---")
     
-    # Botón de calcular
-    if st.button("🚀 CALCULAR INTEGRAL", type="primary", use_container_width=True):
-        validado = True
-else:
-    validado = False
+    if st.button("🚀 CALCULAR ÁREA", type="primary", use_container_width=True):
+        calc_active = True
+    else:
+        calc_active = False
 
-# --- 4. RESULTADOS (ABAJO) ---
-if validado and st.session_state.user_formula:
+# --- 4. CÁLCULO Y GRÁFICO 2D ---
+if calc_active and formula_txt:
     st.divider()
+    
     try:
-        # A. Preparar datos para el gráfico
-        # Creamos puntos X un poco más allá de los límites para ver el contexto
-        margen = (lim_b - lim_a) * 0.2
-        if margen == 0: margen = 1.0 # Evitar error si a=b
+        # A. GENERACIÓN DE DATOS
+        # Creamos un rango un poco más amplio que a-b para que el gráfico se vea bien
+        margin = (lim_b - lim_a) * 0.15 
+        if margin == 0: margin = 1
         
-        x_plot = np.linspace(lim_a - margen, lim_b + margen, 500)
+        x_plot = np.linspace(lim_a - margin, lim_b + margin, 400)
         
-        # B. Contexto matemático
-        contexto = {"x": x_plot, "sin": np.sin, "cos": np.cos, "sqrt": np.sqrt, "pi": np.pi, "e": np.e, "abs": np.abs}
-        
-        # C. Evaluar función
-        formula_py = st.session_state.user_formula.replace("^", "**")
-        y_plot = eval(formula_py, {"__builtins__": None}, contexto)
-        
-        # D. Calcular el ÁREA (Integral numérica)
-        # Solo tomamos los puntos DENTRO del rango [a, b]
+        # B. DICCIONARIO MATEMÁTICO
+        ctx = {
+            "x": x_plot, 
+            "sin": np.sin, "cos": np.cos, "tan": np.tan,
+            "sqrt": np.sqrt, "log": np.log, "exp": np.exp,
+            "pi": np.pi, "e": np.e
+        }
+
+        # C. EVALUACIÓN DE LA FUNCIÓN
+        # Reemplazo de seguridad para potencias
+        f_safe = formula_txt.replace("^", "**")
+        y_plot = eval(f_safe, {"__builtins__": None}, ctx)
+
+        # D. CÁLCULO DEL ÁREA (Solo en el rango a-b)
+        # Filtramos los puntos que están exactamente dentro de los límites
         mask = (x_plot >= lim_a) & (x_plot <= lim_b)
         x_area = x_plot[mask]
         y_area = y_plot[mask]
         
-        # Regla del trapecio para integrar
-        area = np.trapz(y_area, x_area)
+        # Integral Numérica (Regla del Trapecio)
+        area_val = np.trapz(y_area, x_area)
+
+        # E. VISUALIZACIÓN
+        col_res_txt, col_res_graph = st.columns([1, 2])
         
-        # --- GRAFICAR CON PLOTLY (2D Interactivo) ---
-        fig = go.Figure()
+        with col_res_txt:
+            st.success("✅ Cálculo Exitoso")
+            st.metric("Área Aproximada", f"{area_val:,.4f}")
+            st.markdown(f"""
+            **Detalles:**
+            * Límite inf: `{lim_a}`
+            * Límite sup: `{lim_b}`
+            """)
 
-        # 1. Línea de la función completa
-        fig.add_trace(go.Scatter(
-            x=x_plot, y=y_plot,
-            mode='lines',
-            name='f(x)',
-            line=dict(color='#00CC96', width=3)
-        ))
+        with col_res_graph:
+            fig = go.Figure()
 
-        # 2. Área sombreada (La integral)
-        # Añadimos puntos base para cerrar el polígono y que se pinte bien
-        x_fill = np.concatenate(([lim_a], x_area, [lim_b]))
-        y_fill = np.concatenate(([0], y_area, [0]))
-        
-        fig.add_trace(go.Scatter(
-            x=x_fill, y=y_fill,
-            fill='toself',
-            fillcolor='rgba(239, 35, 60, 0.3)', # Rojo transparente
-            line=dict(color='rgba(255,255,255,0)'),
-            name='Área (Integral)',
-            hoverinfo='skip'
-        ))
+            # 1. Línea de la función (Verde)
+            fig.add_trace(go.Scatter(
+                x=x_plot, y=y_plot,
+                mode='lines',
+                name='Función f(x)',
+                line=dict(color='#2ECC71', width=3)
+            ))
 
-        # Diseño del gráfico
-        fig.update_layout(
-            title="Gráfico de la Función y Área",
-            xaxis_title="Eje X",
-            yaxis_title="f(x)",
-            template="plotly_dark",
-            height=500,
-            showlegend=True
-        )
+            # 2. Área Sombreada (Integral)
+            # Truco para cerrar el área perfectamente: bajar a y=0 en los bordes
+            x_fill = np.concatenate(([x_area[0]], x_area, [x_area[-1]]))
+            y_fill = np.concatenate(([0], y_area, [0]))
 
-        # Mostrar resultado numérico GRANDE
-        c_res1, c_res2 = st.columns([1, 2])
-        with c_res1:
-            st.success(f"**Resultado:**\n# {area:,.4f}")
-        with c_res2:
+            fig.add_trace(go.Scatter(
+                x=x_fill, y=y_fill,
+                fill='toself',
+                fillcolor='rgba(231, 76, 60, 0.3)', # Rojo transparente
+                line=dict(color='rgba(255,255,255,0)'),
+                name='Área Integrada',
+                hoverinfo='skip'
+            ))
+
+            fig.update_layout(
+                title="Gráfico del Área Bajo la Curva",
+                xaxis_title="Eje X",
+                yaxis_title="f(x)",
+                template="plotly_dark",
+                height=450,
+                margin=dict(l=20, r=20, t=40, b=20)
+            )
             st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
-        st.error(f"❌ Error: {e}")
-        st.info("Revisa la sintaxis. Ejemplo para tu imagen: 6 - 0.0006 * x")
+        st.error(f"❌ Error en la fórmula: {e}")
+        st.warning("Revisa que hayas usado el asterisco para multiplicar (ej: 0.0006 * x)")
