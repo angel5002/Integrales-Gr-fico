@@ -2,12 +2,11 @@ import streamlit as st
 import numpy as np
 import pandas as pd
 
-# --- 1. CONFIGURACIÓN Y ESTILO (SOLIDO) ---
+# --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="Calculadora de Integrales 3D", layout="wide")
 
 st.markdown("""
 <style>
-    /* Estilo robusto para botones */
     div.stButton > button {
         background-color: #262730 !important;
         color: #ffffff !important;
@@ -27,7 +26,6 @@ st.markdown("""
         background-color: #ff4b4b !important;
         color: white !important;
     }
-    /* Input grande y visible */
     .stTextInput > div > div > input {
         font-size: 1.4rem;
         padding: 10px;
@@ -35,7 +33,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Verificación de librería gráfica
 try:
     import plotly.graph_objects as go
 except ImportError:
@@ -70,7 +67,6 @@ with col_calc:
     )
 
     # --- BOTONERA ---
-    # Fila 1
     b1, b2, b3, b4, b5 = st.columns(5)
     b1.button("CLR", on_click=btn_clear, use_container_width=True)
     b2.button("DEL", on_click=btn_delete, use_container_width=True)
@@ -78,7 +74,6 @@ with col_calc:
     b4.button(")", on_click=btn_click, args=(")",), use_container_width=True)
     b5.button("^", on_click=btn_click, args=("**",), use_container_width=True)
 
-    # Fila 2
     b6, b7, b8, b9, b10 = st.columns(5)
     b6.button("7", on_click=btn_click, args=("7",), use_container_width=True)
     b7.button("8", on_click=btn_click, args=("8",), use_container_width=True)
@@ -86,7 +81,6 @@ with col_calc:
     b9.button("÷", on_click=btn_click, args=(" / ",), use_container_width=True)
     b10.button("√", on_click=btn_click, args=("sqrt(",), use_container_width=True)
 
-    # Fila 3
     b11, b12, b13, b14, b15 = st.columns(5)
     b11.button("4", on_click=btn_click, args=("4",), use_container_width=True)
     b12.button("5", on_click=btn_click, args=("5",), use_container_width=True)
@@ -94,7 +88,6 @@ with col_calc:
     b14.button("×", on_click=btn_click, args=(" * ",), use_container_width=True)
     b15.button("sin", on_click=btn_click, args=("sin(",), use_container_width=True)
 
-    # Fila 4
     b16, b17, b18, b19, b20 = st.columns(5)
     b16.button("1", on_click=btn_click, args=("1",), use_container_width=True)
     b17.button("2", on_click=btn_click, args=("2",), use_container_width=True)
@@ -102,7 +95,6 @@ with col_calc:
     b19.button("－", on_click=btn_click, args=(" - ",), use_container_width=True)
     b20.button("cos", on_click=btn_click, args=("cos(",), use_container_width=True)
 
-    # Fila 5
     b21, b22, b23, b24, b25 = st.columns(5)
     b21.button("0", on_click=btn_click, args=("0",), use_container_width=True)
     b22.button(".", on_click=btn_click, args=("."), use_container_width=True)
@@ -124,6 +116,7 @@ with col_opts:
     with st.container(border=True):
         st.markdown("**Intervalo en el Eje X**")
         c1, c2 = st.columns(2)
+        # Valores por defecto corregidos para tu ejemplo
         lim_a = c1.number_input("Desde (a)", value=4000.0, step=100.0)
         lim_b = c2.number_input("Hasta (b)", value=6500.0, step=100.0)
 
@@ -134,58 +127,59 @@ with col_opts:
     else:
         calc_active = False
 
-# --- 4. CÁLCULO Y GRÁFICO 3D (EDITADO) ---
+# --- 4. CÁLCULO Y GRÁFICO 3D ---
 if calc_active and formula_txt:
     st.divider()
     
     try:
-        # A. GENERACIÓN DE DATOS (Eje X)
-        margin = (lim_b - lim_a) * 0.1 
-        if margin == 0: margin = 1
+        # --- PASO 1: CÁLCULO MATEMÁTICO PRECISO ---
+        # Creamos un array que va EXACTAMENTE de 'a' a 'b' con alta resolución
+        # Esto garantiza que el cálculo numérico sea preciso (dará 7125)
+        x_integ = np.linspace(lim_a, lim_b, 1000)
         
-        # Creamos los puntos del eje X
-        x_vals = np.linspace(lim_a - margin, lim_b + margin, 100)
-        
-        # B. EVALUACIÓN DE LA FUNCIÓN
         ctx = {
-            "x": x_vals, 
+            "x": x_integ, 
             "sin": np.sin, "cos": np.cos, "tan": np.tan,
             "sqrt": np.sqrt, "log": np.log, "exp": np.exp,
             "pi": np.pi, "e": np.e
         }
         f_safe = formula_txt.replace("^", "**")
-        z_vals = eval(f_safe, {"__builtins__": None}, ctx) # Esto es f(x), que será nuestra altura Z
-
-        # C. CÁLCULO MATEMÁTICO (Área)
-        mask = (x_vals >= lim_a) & (x_vals <= lim_b)
-        area_val = np.trapz(z_vals[mask], x_vals[mask])
-
-        # D. TRUCO VISUAL PARA 3D
-        # Para usar go.Surface, necesitamos matrices X, Y, Z.
-        # Crearemos un eje Y falso (solo para dar profundidad visual)
-        y_vals = np.linspace(0, 10, 50) # Profundidad arbitraria
         
-        # Meshgrid crea la rejilla
-        X_mesh, Y_mesh = np.meshgrid(x_vals, y_vals)
-        
-        # Para Z, simplemente repetimos el valor de f(x) a lo largo del eje Y
-        # Esto crea una "sábana" o extrusión de la curva 2D
-        Z_mesh = np.tile(z_vals, (len(y_vals), 1))
+        # Evaluamos para el cálculo del área
+        y_integ = eval(f_safe, {"__builtins__": None}, ctx)
+        area_val = np.trapz(y_integ, x_integ) # Integral numérica precisa
 
-        # E. VISUALIZACIÓN
+        # --- PASO 2: VISUALIZACIÓN 3D (Con márgenes) ---
+        # Ahora generamos datos aparte para que el gráfico se vea bonito con márgenes
+        margin = (lim_b - lim_a) * 0.1 
+        if margin == 0: margin = 1
+        
+        x_plot = np.linspace(lim_a - margin, lim_b + margin, 100)
+        
+        # Evaluamos de nuevo pero para los puntos del gráfico
+        ctx["x"] = x_plot
+        z_plot = eval(f_safe, {"__builtins__": None}, ctx)
+
+        # Truco 3D: Crear profundidad falsa (Eje Y)
+        y_vals = np.linspace(0, 10, 50) 
+        X_mesh, Y_mesh = np.meshgrid(x_plot, y_vals)
+        Z_mesh = np.tile(z_plot, (len(y_vals), 1))
+
+        # --- RESULTADOS ---
         col_res_txt, col_res_graph = st.columns([1, 2])
         
         with col_res_txt:
             st.success("✅ Cálculo Exitoso")
-            st.metric("Resultado (Integral)", f"{area_val:,.4f}")
-            st.info("Visualizando la función extendida en 3D para mayor detalle.")
+            # Mostramos el resultado con formato de miles (,)
+            st.metric("Resultado Exacto", f"{area_val:,.4f}")
+            st.info("El cálculo ahora se realiza sobre el intervalo exacto [a, b] para máxima precisión.")
 
         with col_res_graph:
             fig = go.Figure(data=[go.Surface(
                 z=Z_mesh,
                 x=X_mesh,
                 y=Y_mesh,
-                colorscale='Jet', # Colores brillantes como pediste
+                colorscale='Jet', 
                 colorbar=dict(title='f(x)'),
                 opacity=0.9
             )])
@@ -193,9 +187,9 @@ if calc_active and formula_txt:
             fig.update_layout(
                 title="Visualización 3D de f(x)",
                 scene=dict(
-                    xaxis_title='Eje X (Variable)',
-                    yaxis_title='Profundidad (Decorativo)',
-                    zaxis_title='f(x) (Altura)',
+                    xaxis_title='Eje X',
+                    yaxis_title='Profundidad',
+                    zaxis_title='Altura f(x)',
                     aspectmode='cube'
                 ),
                 height=500,
