@@ -38,6 +38,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Verificación de librerías
 try:
     import plotly.graph_objects as go
 except ImportError:
@@ -46,9 +47,9 @@ except ImportError:
 
 # --- 3. LÓGICA DE MEMORIA ---
 if 'user_expression' not in st.session_state:
-    st.session_state.user_expression = "x^(3/2)" 
+    st.session_state.user_expression = "x^(3/2)"
 
-# Variables de estado
+# Variables para almacenar resultados
 if 'result_ready' not in st.session_state:
     st.session_state.result_ready = False
 if 'fig_storage' not in st.session_state:
@@ -69,10 +70,32 @@ def delete():
     if len(st.session_state.user_expression) > 0:
         st.session_state.user_expression = st.session_state.user_expression[:-1]
 
+# --- FUNCIÓN DE EVALUACIÓN SEGURA ---
+def evaluar_funcion(formula_str, x_vals, ctx):
+    """Evalúa la función y maneja errores de escalares, complejos y NaNs."""
+    # 1. Reemplazo de potencia visual
+    f_clean = formula_str.replace("^", "**")
+    
+    # 2. Evaluación
+    y_vals = eval(f_clean, {"__builtins__": None}, ctx)
+    
+    # 3. Corrección de Escalares (Si el usuario pone '5', convertir a [5, 5, 5...])
+    if np.isscalar(y_vals):
+        y_vals = np.full_like(x_vals, y_vals)
+        
+    # 4. Corrección de Complejos (Raíces negativas)
+    if np.iscomplexobj(y_vals):
+        y_vals = y_vals.real
+        
+    # 5. Corrección de Errores (NaN -> 0)
+    y_vals = np.nan_to_num(y_vals, nan=0.0, posinf=0.0, neginf=0.0)
+    
+    return y_vals
+
 # --- FUNCIÓN MAESTRA DE CÁLCULO ---
 def realizar_calculo(formula, a, b, es_volumen):
     try:
-        # 1. Rango matemático (Alta precisión)
+        # 1. Rango matemático preciso
         x_math = np.linspace(a, b, 2000)
         
         # 2. Contexto matemático
@@ -81,20 +104,9 @@ def realizar_calculo(formula, a, b, es_volumen):
             "sqrt": np.sqrt, "log": np.log, "exp": np.exp, "pi": np.pi, "e": np.e, "abs": np.abs
         }
         
-        # 3. TRADUCCIÓN Y LIMPIEZA DE ERRORES
-        f_clean = formula.replace("^", "**")
+        # 3. Evaluar f(x)
+        y_math = evaluar_funcion(formula, x_math, ctx)
         
-        # Evaluamos f(x)
-        y_raw = eval(f_clean, {"__builtins__": None}, ctx)
-        
-        # --- CORRECCIÓN CRÍTICA ---
-        # Convertimos NaNs (errores de raíz negativa) y números complejos a 0.0
-        # Esto evita que la app se rompa con x^(3/2) en negativos.
-        if np.iscomplexobj(y_raw):
-            y_math = np.nan_to_num(y_raw.real, nan=0.0)
-        else:
-            y_math = np.nan_to_num(y_raw, nan=0.0)
-            
         # 4. Cálculos
         if es_volumen:
             # Volumen: pi * integral(y^2)
@@ -105,23 +117,20 @@ def realizar_calculo(formula, a, b, es_volumen):
             txt_pi = f"{integral_base:,.4f} π u³"
             
             # --- GRÁFICO SÓLIDO ---
-            x_plot = np.linspace(a, b, 80)
-            ctx["x"] = x_plot
-            y_plot_raw = eval(f_clean, {"__builtins__": None}, ctx)
-            
-            # Limpieza para gráfico
-            if np.iscomplexobj(y_plot_raw): y_plot = np.nan_to_num(y_plot_raw.real, nan=0.0)
-            else: y_plot = np.nan_to_num(y_plot_raw, nan=0.0)
+            # Generar puntos estrictamente dentro del rango para el sólido
+            x_solid = np.linspace(a, b, 80)
+            ctx["x"] = x_solid
+            y_solid = evaluar_funcion(formula, x_solid, ctx)
             
             theta = np.linspace(0, 2*np.pi, 60)
-            X_m, T_m = np.meshgrid(x_plot, theta)
-            R_m = np.tile(y_plot, (len(theta), 1))
+            X_m, T_m = np.meshgrid(x_solid, theta)
+            R_m = np.tile(y_solid, (len(theta), 1))
             Y_m = R_m * np.cos(T_m)
             Z_m = R_m * np.sin(T_m)
             
             surface = go.Surface(x=X_m, y=Y_m, z=Z_m, colorscale='Jet', opacity=0.8, name='Sólido')
             
-            # Eje X visual
+            # Eje X visual (Más largo para dar margen)
             margin = (b - a) * 0.2 if (b-a) != 0 else 1
             x_line = np.linspace(a - margin, b + margin, 10)
             linea_eje = go.Scatter3d(x=x_line, y=x_line*0, z=x_line*0, mode='lines', line=dict(color='white', width=4), name='Eje X')
@@ -144,27 +153,23 @@ def realizar_calculo(formula, a, b, es_volumen):
             txt_pi = ""
             
             # --- GRÁFICO ÁREA ---
+            # Puntos del área
             x_plot = np.linspace(a, b, 100)
             ctx["x"] = x_plot
-            y_plot_raw = eval(f_clean, {"__builtins__": None}, ctx)
+            y_plot = evaluar_funcion(formula, x_plot, ctx)
             
-            if np.iscomplexobj(y_plot_raw): y_plot = np.nan_to_num(y_plot_raw.real, nan=0.0)
-            else: y_plot = np.nan_to_num(y_plot_raw, nan=0.0)
-            
+            # Profundidad falsa para efecto 3D
             y_fake = np.linspace(0, 4, 20)
             X_m, Y_m = np.meshgrid(x_plot, y_fake)
             Z_m = np.tile(y_plot, (len(y_fake), 1))
             
             surface = go.Surface(x=X_m, y=Y_m, z=Z_m, colorscale='Viridis', opacity=0.9, name='Área')
             
-            # Línea de función
+            # Línea de función completa (con márgenes)
             margin = (b - a) * 0.2 if (b-a) != 0 else 1
             x_line = np.linspace(a - margin, b + margin, 150)
             ctx["x"] = x_line
-            y_line_raw = eval(f_clean, {"__builtins__": None}, ctx)
-            
-            if np.iscomplexobj(y_line_raw): y_line = np.nan_to_num(y_line_raw.real, nan=0.0)
-            else: y_line = np.nan_to_num(y_line_raw, nan=0.0)
+            y_line = evaluar_funcion(formula, x_line, ctx)
             
             line_trace = go.Scatter3d(x=x_line, y=np.zeros_like(x_line), z=y_line, mode='lines', line=dict(color='white', width=5), name='Función f(x)')
             
@@ -181,16 +186,12 @@ def realizar_calculo(formula, a, b, es_volumen):
         st.session_state.result_ready = True
 
     except Exception as e:
-        st.error(f"Error Matemático: {e}")
-        st.warning("Revisa que los paréntesis estén cerrados. Ej: x^(3/2)")
+        st.error(f"Error en el cálculo: {e}")
+        st.warning("Verifica tu sintaxis. Ejemplo para raíz: x^(1/2) o sqrt(x)")
         st.session_state.result_ready = False
 
 # --- 4. INTERFAZ GRÁFICA ---
 st.title("∫ Calculadora de Integrales y Sólidos")
-
-
-
-[Image of volume of revolution formula]
 
 
 col1, col2 = st.columns([1.5, 1], gap="large")
