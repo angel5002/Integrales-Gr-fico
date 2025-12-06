@@ -1,5 +1,6 @@
 import streamlit as st
 import numpy as np
+import numexpr as ne
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="Calculadora Integral Pro", layout="wide")
@@ -72,25 +73,53 @@ def delete():
 
 # --- FUNCIÓN DE EVALUACIÓN SEGURA ---
 def evaluar_funcion(formula_str, x_vals, ctx):
-    """Evalúa la función y maneja errores de escalares, complejos y NaNs."""
-    # 1. Reemplazo de potencia visual
-    f_clean = formula_str.replace("^", "**")
-    
-    # 2. Evaluación
-    y_vals = eval(f_clean, {"__builtins__": None}, ctx)
-    
-    # 3. Corrección de Escalares (Si el usuario pone '5', convertir a [5, 5, 5...])
-    if np.isscalar(y_vals):
-        y_vals = np.full_like(x_vals, y_vals)
-        
-    # 4. Corrección de Complejos (Raíces negativas)
-    if np.iscomplexobj(y_vals):
-        y_vals = y_vals.real
-        
-    # 5. Corrección de Errores (NaN -> 0)
-    y_vals = np.nan_to_num(y_vals, nan=0.0, posinf=0.0, neginf=0.0)
-    
-    return y_vals
+    """
+    Evalúa funciones matemáticas de forma segura y robusta usando numexpr.
+    Maneja potencias, divisiones, raíces, NaNs y complejos.
+    """
+    # 1. Normalizar expresión
+    f = formula_str.lower().replace("^", "**")
+
+    # Correcciones comunes de usuarios
+    f = f.replace(")(", ")*(")
+    f = f.replace("√", "sqrt")
+    f = f.replace("pi", "pi")
+
+    # ---- ⚠️ FIX CRÍTICO: asegurar prioridad correcta en potencias ----
+    # x^3/2 → (x**3)/2
+    # 1/x^3/2 → 1/(x**3)/2
+    import re
+
+    def fix_powers(match):
+        base = match.group(1)
+        exp = match.group(2)
+        exp = exp.replace(" ", "")
+        return f"{base}**({exp})"
+
+    f = re.sub(r"(\w+|\([^()]+\))\s*\*\*\s*([0-9\./+-]+)", fix_powers, f)
+
+    # 2. Variables válidas para numexpr
+    allowed = {
+        'x': x_vals,
+        'sin': np.sin, 'cos': np.cos, 'tan': np.tan,
+        'sqrt': np.sqrt, 'log': np.log, 'exp': np.exp,
+        'pi': np.pi, 'e': np.e, 'abs': np.abs
+    }
+
+    # 3. Evaluación segura
+    try:
+        y = ne.evaluate(f, local_dict=allowed)
+    except Exception as e:
+        raise ValueError(f"Error al evaluar la expresión: {e}")
+
+    # 4. Arreglos de problemas matemáticos
+    y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
+
+    # 5. Si retorna escalar, convertir a vector
+    if np.isscalar(y):
+        y = np.full_like(x_vals, y)
+
+    return y
 
 # --- FUNCIÓN MAESTRA DE CÁLCULO ---
 def realizar_calculo(formula, a, b, es_volumen):
@@ -99,10 +128,7 @@ def realizar_calculo(formula, a, b, es_volumen):
         x_math = np.linspace(a, b, 2000)
         
         # 2. Contexto matemático
-        ctx = {
-            "x": x_math, "sin": np.sin, "cos": np.cos, "tan": np.tan,
-            "sqrt": np.sqrt, "log": np.log, "exp": np.exp, "pi": np.pi, "e": np.e, "abs": np.abs
-        }
+        ctx = {}
         
         # 3. Evaluar f(x)
         y_math = evaluar_funcion(formula, x_math, ctx)
