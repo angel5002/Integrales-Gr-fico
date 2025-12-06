@@ -3,11 +3,11 @@ import numpy as np
 import pandas as pd
 
 # --- 1. CONFIGURACIÓN Y ESTILO (SOLIDO) ---
-st.set_page_config(page_title="Calculadora de Integrales", layout="wide")
+st.set_page_config(page_title="Calculadora de Integrales 3D", layout="wide")
 
 st.markdown("""
 <style>
-    /* Estilo robusto para botones: Gris oscuro, texto blanco, borde visible */
+    /* Estilo robusto para botones */
     div.stButton > button {
         background-color: #262730 !important;
         color: #ffffff !important;
@@ -42,13 +42,11 @@ except ImportError:
     st.error("⚠️ Falta 'plotly'. Revisa requirements.txt")
     st.stop()
 
-# --- 2. LÓGICA DE MEMORIA (CORE FIX) ---
-# Usamos 'formula_state' para controlar el texto sin que se borre
+# --- 2. LÓGICA DE MEMORIA ---
 if 'formula_state' not in st.session_state:
     st.session_state.formula_state = "6 - 0.0006*x"
 
 def btn_click(val):
-    """Callback que añade texto sin romper el estado"""
     st.session_state.formula_state += str(val)
 
 def btn_clear():
@@ -58,22 +56,20 @@ def btn_delete():
     st.session_state.formula_state = st.session_state.formula_state[:-1]
 
 # --- 3. INTERFAZ ---
-st.title("∫ Calculadora de Área Bajo la Curva")
+st.title("∫ Calculadora de Integrales (Visualización 3D)")
 
 col_calc, col_opts = st.columns([1.5, 1], gap="large")
 
 with col_calc:
     st.subheader("1. Función f(x)")
     
-    # INPUT VINCULADO AL ESTADO
-    # Al escribir aquí, se actualiza 'formula_state' automáticamente gracias al key
     formula_txt = st.text_input(
         "Ecuación:", 
         key="formula_state", 
         label_visibility="collapsed"
     )
 
-    # --- BOTONERA NUMÉRICA Y DE FUNCIONES ---
+    # --- BOTONERA ---
     # Fila 1
     b1, b2, b3, b4, b5 = st.columns(5)
     b1.button("CLR", on_click=btn_clear, use_container_width=True)
@@ -114,10 +110,8 @@ with col_calc:
     b24.button("＋", on_click=btn_click, args=(" + ",), use_container_width=True)
     b25.button("π", on_click=btn_click, args=("pi",), use_container_width=True)
 
-    # Vista matemática simple
     if formula_txt:
         try:
-            # Renderizado visual limpio
             nice_tex = formula_txt.replace("**", "^").replace("*", "") \
                                   .replace("sqrt", "\\sqrt").replace("sin", "\\sin")
             st.latex(f"f(x) = {nice_tex}")
@@ -129,101 +123,85 @@ with col_opts:
     
     with st.container(border=True):
         st.markdown("**Intervalo en el Eje X**")
-        st.caption("Calcularemos el área entre estos dos puntos.")
-        
         c1, c2 = st.columns(2)
-        # Valores por defecto de tu ejemplo (4000 a 6500)
         lim_a = c1.number_input("Desde (a)", value=4000.0, step=100.0)
         lim_b = c2.number_input("Hasta (b)", value=6500.0, step=100.0)
 
     st.markdown("---")
     
-    if st.button("🚀 CALCULAR ÁREA", type="primary", use_container_width=True):
+    if st.button("🚀 CALCULAR E INTEGRAR", type="primary", use_container_width=True):
         calc_active = True
     else:
         calc_active = False
 
-# --- 4. CÁLCULO Y GRÁFICO 2D ---
+# --- 4. CÁLCULO Y GRÁFICO 3D (EDITADO) ---
 if calc_active and formula_txt:
     st.divider()
     
     try:
-        # A. GENERACIÓN DE DATOS
-        # Creamos un rango un poco más amplio que a-b para que el gráfico se vea bien
-        margin = (lim_b - lim_a) * 0.15 
+        # A. GENERACIÓN DE DATOS (Eje X)
+        margin = (lim_b - lim_a) * 0.1 
         if margin == 0: margin = 1
         
-        x_plot = np.linspace(lim_a - margin, lim_b + margin, 400)
+        # Creamos los puntos del eje X
+        x_vals = np.linspace(lim_a - margin, lim_b + margin, 100)
         
-        # B. DICCIONARIO MATEMÁTICO
+        # B. EVALUACIÓN DE LA FUNCIÓN
         ctx = {
-            "x": x_plot, 
+            "x": x_vals, 
             "sin": np.sin, "cos": np.cos, "tan": np.tan,
             "sqrt": np.sqrt, "log": np.log, "exp": np.exp,
             "pi": np.pi, "e": np.e
         }
-
-        # C. EVALUACIÓN DE LA FUNCIÓN
-        # Reemplazo de seguridad para potencias
         f_safe = formula_txt.replace("^", "**")
-        y_plot = eval(f_safe, {"__builtins__": None}, ctx)
+        z_vals = eval(f_safe, {"__builtins__": None}, ctx) # Esto es f(x), que será nuestra altura Z
 
-        # D. CÁLCULO DEL ÁREA (Solo en el rango a-b)
-        # Filtramos los puntos que están exactamente dentro de los límites
-        mask = (x_plot >= lim_a) & (x_plot <= lim_b)
-        x_area = x_plot[mask]
-        y_area = y_plot[mask]
+        # C. CÁLCULO MATEMÁTICO (Área)
+        mask = (x_vals >= lim_a) & (x_vals <= lim_b)
+        area_val = np.trapz(z_vals[mask], x_vals[mask])
+
+        # D. TRUCO VISUAL PARA 3D
+        # Para usar go.Surface, necesitamos matrices X, Y, Z.
+        # Crearemos un eje Y falso (solo para dar profundidad visual)
+        y_vals = np.linspace(0, 10, 50) # Profundidad arbitraria
         
-        # Integral Numérica (Regla del Trapecio)
-        area_val = np.trapz(y_area, x_area)
+        # Meshgrid crea la rejilla
+        X_mesh, Y_mesh = np.meshgrid(x_vals, y_vals)
+        
+        # Para Z, simplemente repetimos el valor de f(x) a lo largo del eje Y
+        # Esto crea una "sábana" o extrusión de la curva 2D
+        Z_mesh = np.tile(z_vals, (len(y_vals), 1))
 
         # E. VISUALIZACIÓN
         col_res_txt, col_res_graph = st.columns([1, 2])
         
         with col_res_txt:
             st.success("✅ Cálculo Exitoso")
-            st.metric("Área Aproximada", f"{area_val:,.4f}")
-            st.markdown(f"""
-            **Detalles:**
-            * Límite inf: `{lim_a}`
-            * Límite sup: `{lim_b}`
-            """)
+            st.metric("Resultado (Integral)", f"{area_val:,.4f}")
+            st.info("Visualizando la función extendida en 3D para mayor detalle.")
 
         with col_res_graph:
-            fig = go.Figure()
-
-            # 1. Línea de la función (Verde)
-            fig.add_trace(go.Scatter(
-                x=x_plot, y=y_plot,
-                mode='lines',
-                name='Función f(x)',
-                line=dict(color='#2ECC71', width=3)
-            ))
-
-            # 2. Área Sombreada (Integral)
-            # Truco para cerrar el área perfectamente: bajar a y=0 en los bordes
-            x_fill = np.concatenate(([x_area[0]], x_area, [x_area[-1]]))
-            y_fill = np.concatenate(([0], y_area, [0]))
-
-            fig.add_trace(go.Scatter(
-                x=x_fill, y=y_fill,
-                fill='toself',
-                fillcolor='rgba(231, 76, 60, 0.3)', # Rojo transparente
-                line=dict(color='rgba(255,255,255,0)'),
-                name='Área Integrada',
-                hoverinfo='skip'
-            ))
+            fig = go.Figure(data=[go.Surface(
+                z=Z_mesh,
+                x=X_mesh,
+                y=Y_mesh,
+                colorscale='Jet', # Colores brillantes como pediste
+                colorbar=dict(title='f(x)'),
+                opacity=0.9
+            )])
 
             fig.update_layout(
-                title="Gráfico del Área Bajo la Curva",
-                xaxis_title="Eje X",
-                yaxis_title="f(x)",
-                template="plotly_dark",
-                height=450,
-                margin=dict(l=20, r=20, t=40, b=20)
+                title="Visualización 3D de f(x)",
+                scene=dict(
+                    xaxis_title='Eje X (Variable)',
+                    yaxis_title='Profundidad (Decorativo)',
+                    zaxis_title='f(x) (Altura)',
+                    aspectmode='cube'
+                ),
+                height=500,
+                margin=dict(l=0, r=0, b=0, t=40)
             )
             st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
         st.error(f"❌ Error en la fórmula: {e}")
-        st.warning("Revisa que hayas usado el asterisco para multiplicar (ej: 0.0006 * x)")
