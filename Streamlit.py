@@ -20,15 +20,12 @@ st.markdown("""
         margin-bottom: 8px !important;
         transition: all 0.2s ease-in-out;
     }
-
-    /* Efecto Hover */
     div.stButton > button:hover {
         border-color: #ff4b4b !important;
         color: #ff4b4b !important;
         background-color: #31333F !important;
         transform: scale(1.02);
     }
-
     /* Estilo del Input de Texto */
     .stTextInput > div > div > input {
         font-size: 1.8rem !important;
@@ -41,18 +38,17 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Verificación de librerías
 try:
     import plotly.graph_objects as go
 except ImportError:
     st.error("⚠️ Error: Falta 'plotly'.")
     st.stop()
 
-# --- 3. LÓGICA DE MEMORIA (ESTABLE) ---
+# --- 3. LÓGICA DE MEMORIA ---
 if 'user_expression' not in st.session_state:
-    st.session_state.user_expression = "6 - 0.0006*x"
+    st.session_state.user_expression = "x^(3/2)" # Ejemplo por defecto corregido visualmente
 
-# Variables para almacenar resultados
+# Variables de estado para resultados
 if 'result_ready' not in st.session_state:
     st.session_state.result_ready = False
 if 'fig_storage' not in st.session_state:
@@ -62,7 +58,7 @@ if 'text_result_storage' not in st.session_state:
 if 'pi_result_storage' not in st.session_state:
     st.session_state.pi_result_storage = ""
 
-# Callbacks de Botonera
+# Callbacks
 def add(val):
     st.session_state.user_expression += str(val)
 
@@ -76,8 +72,7 @@ def delete():
 # --- FUNCIÓN MAESTRA DE CÁLCULO ---
 def realizar_calculo(formula, a, b, es_volumen):
     try:
-        # 1. Rango matemático preciso (para el cálculo numérico)
-        # Usamos muchos puntos para que la integral numérica sea exacta
+        # 1. Rango matemático preciso (2000 puntos para precisión)
         x_math = np.linspace(a, b, 2000)
         
         # 2. Contexto matemático
@@ -86,109 +81,89 @@ def realizar_calculo(formula, a, b, es_volumen):
             "sqrt": np.sqrt, "log": np.log, "exp": np.exp, "pi": np.pi, "e": np.e, "abs": np.abs
         }
         
-        # 3. Limpieza y Evaluación
+        # 3. LIMPIEZA INTELIGENTE
+        # Reemplazamos el ^ visual por el ** de Python
         f_clean = formula.replace("^", "**")
-        y_math = eval(f_clean, {"__builtins__": None}, ctx)
         
-        # 4. Cálculo de Integral y Gráfico
+        # Evaluamos
+        # Usamos nan_to_num para convertir errores (raíces negativas) en 0 y no romper la app
+        y_math = eval(f_clean, {"__builtins__": None}, ctx)
+        y_math = np.nan_to_num(y_math, nan=0.0, posinf=0.0, neginf=0.0)
+        
+        # 4. Cálculo
         if es_volumen:
-            # --- CÁLCULO VOLUMEN (Método de Discos) ---
-            # Fórmula: V = pi * integral( [f(x)]^2 )
-            
-            # Paso A: Calculamos la integral de f(x)^2 SIN pi
+            # Volumen: pi * integral(y^2)
             integral_base = np.trapz(y_math**2, x_math)
-            
-            # Paso B: Resultados para mostrar
             volumen_total = integral_base * np.pi
             
-            txt_res = f"{volumen_total:,.4f} u³"       # Resultado numérico total
-            txt_pi = f"{integral_base:,.4f} π u³"      # Resultado "con pi" (Ej: 15.5 π)
+            txt_res = f"{volumen_total:,.4f} u³"
+            txt_pi = f"{integral_base:,.4f} π u³"
             
-            # --- GRÁFICO SÓLIDO (Revolución) ---
-            # A. Sólido EXACTO (Sin sobrantes)
-            # Creamos puntos estrictamente entre a y b
-            x_solid = np.linspace(a, b, 80) 
+            # --- GRÁFICO SÓLIDO ---
+            # Generamos solo en el rango a-b
+            x_solid = np.linspace(a, b, 80)
             ctx["x"] = x_solid
-            y_solid = eval(f_clean, {"__builtins__": None}, ctx) # Radio exacto
+            y_solid = eval(f_clean, {"__builtins__": None}, ctx)
+            y_solid = np.nan_to_num(y_solid, nan=0.0) # Protección contra errores en gráfico
             
-            # Generamos la revolución
             theta = np.linspace(0, 2*np.pi, 60)
             X_m, T_m = np.meshgrid(x_solid, theta)
             R_m = np.tile(y_solid, (len(theta), 1))
             Y_m = R_m * np.cos(T_m)
             Z_m = R_m * np.sin(T_m)
             
-            # Superficie del sólido (Clipped)
             surface = go.Surface(x=X_m, y=Y_m, z=Z_m, colorscale='Jet', opacity=0.8, name='Sólido')
             
-            # B. Contexto Visual (Márgenes)
-            # Creamos una línea invisible más larga que [a, b] para forzar el zoom out
+            # Línea de Eje X (Más larga para dar margen visual)
             margin = (b - a) * 0.2 if (b-a) != 0 else 1
             x_line = np.linspace(a - margin, b + margin, 10)
-            linea_eje = go.Scatter3d(
-                x=x_line, y=x_line*0, z=x_line*0, 
-                mode='lines', 
-                line=dict(color='white', width=4), 
-                name='Eje X'
-            )
+            linea_eje = go.Scatter3d(x=x_line, y=x_line*0, z=x_line*0, mode='lines', line=dict(color='white', width=4), name='Eje X')
 
             fig = go.Figure(data=[surface, linea_eje])
             fig.update_layout(
-                title="Sólido de Revolución (Vista 3D)", 
+                title="Sólido de Revolución 3D", 
                 scene=dict(
-                    xaxis=dict(title='Eje X', range=[a-margin, b+margin]), # Forzamos el rango visual
-                    yaxis=dict(title='Y'),
-                    zaxis=dict(title='Z'),
-                    aspectmode='data' # Mantiene la proporción real del objeto
+                    xaxis=dict(title='Eje X', range=[a-margin, b+margin]),
+                    yaxis=dict(title='Y'), zaxis=dict(title='Z'),
+                    aspectmode='data'
                 ), 
-                height=600,
-                margin=dict(l=0, r=0, b=0, t=40)
+                height=600, margin=dict(l=0, r=0, b=0, t=40)
             )
             
         else:
-            # --- CÁLCULO ÁREA ---
+            # Área: integral(y)
             area_total = np.trapz(y_math, x_math)
             txt_res = f"{area_total:,.4f} u²"
-            txt_pi = "" 
+            txt_pi = ""
             
-            # --- GRÁFICO ÁREA (Extrusión) ---
-            # A. Superficie EXACTA (Entre a y b)
-            x_solid = np.linspace(a, b, 100)
-            ctx["x"] = x_solid
-            y_solid = eval(f_clean, {"__builtins__": None}, ctx)
+            # --- GRÁFICO ÁREA ---
+            x_plot = np.linspace(a, b, 100)
+            ctx["x"] = x_plot
+            y_plot = eval(f_clean, {"__builtins__": None}, ctx)
+            y_plot = np.nan_to_num(y_plot, nan=0.0)
             
-            # Profundidad decorativa
-            y_fake = np.linspace(0, 5, 20)
-            X_m, Y_m = np.meshgrid(x_solid, y_fake)
-            Z_m = np.tile(y_solid, (len(y_fake), 1))
+            y_fake = np.linspace(0, 4, 20)
+            X_m, Y_m = np.meshgrid(x_plot, y_fake)
+            Z_m = np.tile(y_plot, (len(y_fake), 1))
             
             surface = go.Surface(x=X_m, y=Y_m, z=Z_m, colorscale='Viridis', opacity=0.9, name='Área')
-
-            # B. Línea de contexto (Para ver la curva más allá de la integral)
+            
+            # Línea de contexto
             margin = (b - a) * 0.2 if (b-a) != 0 else 1
             x_line = np.linspace(a - margin, b + margin, 150)
             ctx["x"] = x_line
             y_line = eval(f_clean, {"__builtins__": None}, ctx)
+            y_line = np.nan_to_num(y_line, nan=0.0)
             
-            # Dibujamos la línea de la función completa (plana en y=0)
-            line_trace = go.Scatter3d(
-                x=x_line, y=np.zeros_like(x_line), z=y_line,
-                mode='lines', line=dict(color='white', width=5), name='Función f(x)'
-            )
+            line_trace = go.Scatter3d(x=x_line, y=np.zeros_like(x_line), z=y_line, mode='lines', line=dict(color='white', width=5), name='Función f(x)')
             
             fig = go.Figure(data=[surface, line_trace])
             fig.update_layout(
-                title="Área bajo la curva (Extrusión 3D)", 
-                scene=dict(
-                    xaxis=dict(range=[a-margin, b+margin]), # Margen forzado
-                    aspectmode='manual', 
-                    aspectratio=dict(x=1, y=1, z=0.5)
-                ), 
-                height=600,
-                margin=dict(l=0, r=0, b=0, t=40)
+                title="Área bajo la curva (3D)", 
+                scene=dict(xaxis=dict(range=[a-margin, b+margin]), aspectmode='manual', aspectratio=dict(x=1, y=1, z=0.5)), 
+                height=600, margin=dict(l=0, r=0, b=0, t=40)
             )
 
-        # Guardar todo en memoria
         st.session_state.text_result_storage = txt_res
         st.session_state.pi_result_storage = txt_pi
         st.session_state.fig_storage = fig
@@ -196,17 +171,17 @@ def realizar_calculo(formula, a, b, es_volumen):
 
     except Exception as e:
         st.error(f"Error Matemático: {e}")
+        st.warning("Revisa los paréntesis. Ejemplo correcto: x^(3/2)")
         st.session_state.result_ready = False
 
 # --- 4. INTERFAZ GRÁFICA ---
 st.title("∫ Calculadora de Integrales y Sólidos")
 
-
 col1, col2 = st.columns([1.5, 1], gap="large")
 
 with col1:
     st.subheader("1. Función f(x)")
-    # Input SIN callbacks automáticos.
+    # Input
     st.text_input("Ecuación:", key="user_expression", label_visibility="collapsed")
 
     # Botonera
@@ -215,7 +190,8 @@ with col1:
     c2.button("DEL", on_click=delete, use_container_width=True)
     c3.button("(", on_click=add, args=("(",), use_container_width=True)
     c4.button(")", on_click=add, args=(")",), use_container_width=True)
-    c5.button("^", on_click=add, args=("**",), use_container_width=True)
+    # CAMBIO IMPORTANTE: Ahora el botón escribe ^, no **
+    c5.button("^", on_click=add, args=("^",), use_container_width=True)
 
     c6, c7, c8, c9, c10 = st.columns(5)
     c6.button("7", on_click=add, args=("7",), use_container_width=True)
@@ -247,6 +223,7 @@ with col1:
 
     if st.session_state.user_expression:
         try:
+            # Mostramos visualmente bonita la fórmula
             nice_tex = st.session_state.user_expression.replace("**", "^").replace("*", "") \
                                   .replace("sqrt", "\\sqrt").replace("sin", "\\sin") \
                                   .replace("cos", "\\cos").replace("pi", "\\pi")
@@ -260,8 +237,9 @@ with col2:
     with st.container(border=True):
         st.markdown("**Límites**")
         cx, cy = st.columns(2)
-        lim_a = cx.number_input("Desde (a)", value=4000.0, step=100.0)
-        lim_b = cy.number_input("Hasta (b)", value=6500.0, step=100.0)
+        # Valores por defecto seguros
+        lim_a = cx.number_input("Desde (a)", value=0.0, step=1.0)
+        lim_b = cy.number_input("Hasta (b)", value=4.0, step=1.0)
     
     st.markdown("---")
     modo_revolucion = st.toggle("Sólido de Revolución (x π)", value=False)
@@ -275,27 +253,21 @@ with col2:
 
     st.markdown("---")
     
-    # BOTÓN DE EJECUCIÓN
     if st.button("🚀 CALCULAR Y GRAFICAR", type="primary", use_container_width=True):
         realizar_calculo(st.session_state.user_expression, lim_a, lim_b, modo_revolucion)
 
-# --- 5. MOSTRAR RESULTADOS ---
+# --- 5. RESULTADOS ---
 if st.session_state.result_ready:
     st.divider()
-    
     r1, r2 = st.columns([1, 2])
     
     with r1:
         st.success("✅ Resultado:")
-        
-        # Resultado Numérico Total
         st.metric("Valor Total", st.session_state.text_result_storage)
         
-        # Resultado formateado con PI
         if st.session_state.pi_result_storage:
             st.markdown("---")
-            st.info("**Resultado exacto (en función de π):**")
-            # Usamos LaTeX para que se vea como ecuación matemática
+            st.info("**En función de π:**")
             st.latex(f"V \\approx {st.session_state.pi_result_storage}")
         
     with r2:
