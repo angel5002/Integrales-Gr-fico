@@ -1,68 +1,55 @@
 import streamlit as st
 import numpy as np
-
-# Intentamos importar plotly. Si falla, mostramos un mensaje amigable en lugar del error rojo.
+# Intentamos importar plotly de forma segura
 try:
     import plotly.graph_objects as go
 except ImportError:
-    st.error("⚠️ Error: Plotly no está instalado.")
-    st.markdown("Por favor, asegúrate de crear un archivo `requirements.txt` que incluya la palabra `plotly`.")
+    st.error("⚠️ Error: Plotly no está instalado. Crea el archivo requirements.txt")
     st.stop()
 
-# Configuración de la página
-st.set_page_config(page_title="Visualizador de Integrales 3D", layout="wide")
+st.set_page_config(page_title="Calculadora Gráfica 3D", layout="wide")
 
 def main():
-    st.title("🧮 Visualizador Interactivo de Funciones en 3D")
-    
+    st.title("🧮 Calculadora Gráfica 3D Inteligente")
+    st.markdown("Escribe funciones matemáticas de forma natural (ej: `sin(x) + cos(y)` o `x^2`).")
+
     # --- BARRA LATERAL ---
-    st.sidebar.header("⚙️ Configuración")
-    
-    # Entrada de función
-    funcion_input = st.sidebar.text_input(
-        "Función f(x, y):", 
-        value="np.sin(x) * np.cos(y)",
-        help="Usa sintaxis Python: np.sin(x), x**2, etc."
+    st.sidebar.header("1. Ecuación y Límites")
+
+    # Ayuda visual para la sintaxis (Especie de "Teclado" visual)
+    with st.sidebar.expander("ℹ️ Ver Guía de Sintaxis"):
+        st.markdown("""
+        * **Potencia:** `x^2` o `x**2`
+        * **Raíz:** `sqrt(x)`
+        * **Trig:** `sin(x)`, `cos(x)`, `tan(x)`
+        * **Constantes:** `pi`, `e`
+        * **Logaritmo:** `log(x)` (natural), `log10(x)`
+        * **Absoluto:** `abs(x)`
+        """)
+
+    # 1. Entrada de la función (Texto simple)
+    funcion_texto = st.sidebar.text_input(
+        "f(x, y) =", 
+        value="sin(x) * cos(y)",
+        help="Escribe tu función aquí. No necesitas poner 'np.' antes de las funciones."
     )
 
-    # Límites
+    # 2. Límites
     col1, col2 = st.sidebar.columns(2)
     with col1:
-        x_min = st.number_input("X Min", value=-5.0)
-        x_max = st.number_input("X Max", value=5.0)
+        st.sidebar.markdown("**Eje X**")
+        x_min = st.sidebar.number_input("Mín", value=-5.0, key="xm")
+        x_max = st.sidebar.number_input("Máx", value=5.0, key="xM")
     with col2:
-        y_min = st.number_input("Y Min", value=-5.0)
-        y_max = st.number_input("Y Max", value=5.0)
+        st.sidebar.markdown("**Eje Y**")
+        y_min = st.sidebar.number_input("Mín", value=-5.0, key="ym")
+        y_max = st.sidebar.number_input("Máx", value=5.0, key="yM")
 
-    resolucion = st.sidebar.slider("Resolución", 20, 100, 50)
+    resolucion = st.sidebar.slider("Resolución (Detalle)", 20, 150, 60)
 
-    # --- LÓGICA ---
+    # --- PROCESAMIENTO MATEMÁTICO ---
     try:
+        # Generar malla
         x = np.linspace(x_min, x_max, resolucion)
         y = np.linspace(y_min, y_max, resolucion)
-        X, Y = np.meshgrid(x, y)
-        
-        local_dict = {"x": X, "y": Y, "np": np}
-        Z = eval(funcion_input, {"__builtins__": None}, local_dict)
-
-        # --- GRÁFICO ---
-        fig = go.Figure(data=[go.Surface(
-            z=Z, x=X, y=Y,
-            colorscale='Viridis', # Cambié a Viridis que es muy claro científicamente
-            colorbar=dict(title='Z'),
-        )])
-
-        fig.update_layout(
-            title=f'Gráfico de {funcion_input}',
-            scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z'),
-            margin=dict(l=0, r=0, b=0, t=40),
-            height=600
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-    except Exception as e:
-        st.error(f"Error en la función: {e}")
-
-if __name__ == "__main__":
-    main()
+        X
