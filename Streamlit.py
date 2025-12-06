@@ -136,4 +136,45 @@ if st.button("🚀 GENERAR GRÁFICO 3D", type="primary", use_container_width=Tru
         # Esto permite que el usuario escriba sin, cos, etc.
         contexto = {
             "x": X, "y": Y,
-            "sin": np.sin, "cos": np.cos, "
+            "sin": np.sin, "cos": np.cos, "tan": np.tan,
+            "sqrt": np.sqrt, "log": np.log, "exp": np.exp,
+            "abs": np.abs, "pi": np.pi, "e": np.e
+        }
+        
+        # 3. Procesar la fórmula
+        ecuacion_final = formula_input.replace("^", "**") # Reemplazo de seguridad
+        Z = eval(ecuacion_final, {"__builtins__": None}, contexto)
+
+        # 4. Graficar
+        fig = go.Figure(data=[go.Surface(
+            z=Z, x=X, y=Y,
+            colorscale=color_map,
+            colorbar=dict(title='Altura Z')
+        )])
+
+        # Diseño del gráfico limpio
+        fig.update_layout(
+            title=f"Superficie: {formula_input}",
+            scene=dict(
+                xaxis_title='Eje X',
+                yaxis_title='Eje Y',
+                zaxis_title='Eje Z',
+                aspectmode='cube' # Mantiene proporciones reales
+            ),
+            height=700,
+            margin=dict(l=0, r=0, b=0, t=40)
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # --- BONUS: RESULTADO NUMÉRICO (APROX) ---
+        # Si estamos hablando de integrales, mostrar el volumen aproximado es útil
+        volumen = np.sum(Z) * ((x_b - x_a)/resolucion) * ((y_d - y_c)/resolucion)
+        st.metric(label="Volumen Aproximado (Suma de Riemann)", value=f"{volumen:.4f} u³")
+
+    except SyntaxError:
+        st.error("❌ Error de sintaxis. ¿Quizás falta un paréntesis?")
+    except NameError as e:
+        st.error(f"❌ Función desconocida: {e}. Usa los botones de la calculadora.")
+    except Exception as e:
+        st.error(f"❌ Error matemático: {e}")
