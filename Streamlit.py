@@ -1,12 +1,12 @@
 import streamlit as st
 import numpy as np
-import pandas as pd
 
 # --- 1. CONFIGURACIÓN Y ESTILO ---
-st.set_page_config(page_title="Calculadora de Integrales 3D", layout="wide")
+st.set_page_config(page_title="Calculadora Integral Pro", layout="wide")
 
 st.markdown("""
 <style>
+    /* Estilo botones Dark Tech */
     div.stButton > button {
         background-color: #262730 !important;
         color: #ffffff !important;
@@ -39,11 +39,16 @@ except ImportError:
     st.error("⚠️ Falta 'plotly'. Revisa requirements.txt")
     st.stop()
 
-# --- 2. LÓGICA DE MEMORIA ---
+# --- 2. LÓGICA DE MEMORIA SINCRONIZADA ---
 if 'formula_state' not in st.session_state:
     st.session_state.formula_state = "6 - 0.0006*x"
 
+def update_from_input():
+    """Sincroniza lo que el usuario escribe manualmente con la memoria"""
+    st.session_state.formula_state = st.session_state.widget_input
+
 def btn_click(val):
+    """Añade símbolo al final (Limitación de Streamlit: no detecta posición del cursor)"""
     st.session_state.formula_state += str(val)
 
 def btn_clear():
@@ -53,18 +58,24 @@ def btn_delete():
     st.session_state.formula_state = st.session_state.formula_state[:-1]
 
 # --- 3. INTERFAZ ---
-st.title("∫ Calculadora de Integrales (Visualización 3D)")
+st.title("∫ Calculadora de Integrales y Sólidos")
 
 col_calc, col_opts = st.columns([1.5, 1], gap="large")
 
 with col_calc:
     st.subheader("1. Función f(x)")
     
-    formula_txt = st.text_input(
+    # Input vinculado con callback on_change para no perder escritura manual
+    st.text_input(
         "Ecuación:", 
-        key="formula_state", 
+        key="widget_input",
+        value=st.session_state.formula_state,
+        on_change=update_from_input,
         label_visibility="collapsed"
     )
+    # Forzamos actualización visual si se apretó un botón
+    if st.session_state.widget_input != st.session_state.formula_state:
+        st.rerun()
 
     # --- BOTONERA ---
     b1, b2, b3, b4, b5 = st.columns(5)
@@ -102,39 +113,46 @@ with col_calc:
     b24.button("＋", on_click=btn_click, args=(" + ",), use_container_width=True)
     b25.button("π", on_click=btn_click, args=("pi",), use_container_width=True)
 
-    if formula_txt:
+    # Vista previa LaTeX
+    if st.session_state.formula_state:
         try:
-            nice_tex = formula_txt.replace("**", "^").replace("*", "") \
+            nice_tex = st.session_state.formula_state.replace("**", "^").replace("*", "") \
                                   .replace("sqrt", "\\sqrt").replace("sin", "\\sin")
             st.latex(f"f(x) = {nice_tex}")
         except:
             pass
 
 with col_opts:
-    st.subheader("2. Límites de Integración")
+    st.subheader("2. Configuración")
     
     with st.container(border=True):
-        st.markdown("**Intervalo en el Eje X**")
+        st.markdown("**Límites de Integración**")
         c1, c2 = st.columns(2)
-        # Valores por defecto corregidos para tu ejemplo
         lim_a = c1.number_input("Desde (a)", value=4000.0, step=100.0)
         lim_b = c2.number_input("Hasta (b)", value=6500.0, step=100.0)
+    
+    st.markdown("### 🛠️ Tipo de Cálculo")
+    # AQUÍ ESTÁ LA SOLUCIÓN AL PROBLEMA DE PI
+    modo_revolucion = st.toggle("Sólido de Revolución (Volumen)", value=False)
+    
+    if modo_revolucion:
+        st.info("Calculando Volumen: $V = \pi \int [f(x)]^2 dx$")
+    else:
+        st.info("Calculando Área: $A = \int f(x) dx$")
 
     st.markdown("---")
     
-    if st.button("🚀 CALCULAR E INTEGRAR", type="primary", use_container_width=True):
+    if st.button("🚀 CALCULAR Y VISUALIZAR", type="primary", use_container_width=True):
         calc_active = True
     else:
         calc_active = False
 
-# --- 4. CÁLCULO Y GRÁFICO 3D ---
-if calc_active and formula_txt:
+# --- 4. CÁLCULO Y LÓGICA GRÁFICA ---
+if calc_active and st.session_state.formula_state:
     st.divider()
     
     try:
-        # --- PASO 1: CÁLCULO MATEMÁTICO PRECISO ---
-        # Creamos un array que va EXACTAMENTE de 'a' a 'b' con alta resolución
-        # Esto garantiza que el cálculo numérico sea preciso (dará 7125)
+        # --- A. DATOS MATEMÁTICOS PRECISOS ---
         x_integ = np.linspace(lim_a, lim_b, 1000)
         
         ctx = {
@@ -143,59 +161,95 @@ if calc_active and formula_txt:
             "sqrt": np.sqrt, "log": np.log, "exp": np.exp,
             "pi": np.pi, "e": np.e
         }
-        f_safe = formula_txt.replace("^", "**")
+        f_safe = st.session_state.formula_state.replace("^", "**")
         
-        # Evaluamos para el cálculo del área
+        # Evaluar f(x)
         y_integ = eval(f_safe, {"__builtins__": None}, ctx)
-        area_val = np.trapz(y_integ, x_integ) # Integral numérica precisa
 
-        # --- PASO 2: VISUALIZACIÓN 3D (Con márgenes) ---
-        # Ahora generamos datos aparte para que el gráfico se vea bonito con márgenes
+        # --- B. LÓGICA DE CÁLCULO (ÁREA vs VOLUMEN) ---
+        if modo_revolucion:
+            # Volumen: pi * integral(y^2)
+            integral_val = np.pi * np.trapz(y_integ**2, x_integ)
+            label_res = "Volumen del Sólido"
+        else:
+            # Área: integral(y)
+            integral_val = np.trapz(y_integ, x_integ)
+            label_res = "Área bajo la Curva"
+
+        # --- C. GENERACIÓN DE GRÁFICOS (VISUALIZACIÓN) ---
         margin = (lim_b - lim_a) * 0.1 
         if margin == 0: margin = 1
+        x_plot = np.linspace(lim_a - margin, lim_b + margin, 150)
         
-        x_plot = np.linspace(lim_a - margin, lim_b + margin, 100)
-        
-        # Evaluamos de nuevo pero para los puntos del gráfico
+        # Re-evaluar para gráfico con márgenes
         ctx["x"] = x_plot
-        z_plot = eval(f_safe, {"__builtins__": None}, ctx)
+        z_plot = eval(f_safe, {"__builtins__": None}, ctx) # Esto es el Radio en revolución
 
-        # Truco 3D: Crear profundidad falsa (Eje Y)
-        y_vals = np.linspace(0, 10, 50) 
-        X_mesh, Y_mesh = np.meshgrid(x_plot, y_vals)
-        Z_mesh = np.tile(z_plot, (len(y_vals), 1))
+        # CONFIGURACIÓN DE LA FIGURA 3D
+        if modo_revolucion:
+            # --- MODO REVOLUCIÓN: CILINDRO/SOLIDO ---
+            # Creamos una malla angular (theta) para rotar la función
+            theta = np.linspace(0, 2*np.pi, 60)
+            X_mesh, Theta_mesh = np.meshgrid(x_plot, theta)
+            
+            # Como Z_plot es f(x), ese es nuestro RADIO
+            # Para hacer coincidir dimensiones, repetimos z_plot para cada ángulo
+            R_mesh = np.tile(z_plot, (len(theta), 1))
+            
+            # Coordenadas cilíndricas a cartesianas
+            # Eje X se mantiene. Y y Z giran.
+            Y_mesh = R_mesh * np.cos(Theta_mesh)
+            Z_mesh = R_mesh * np.sin(Theta_mesh)
+            
+            surface = go.Surface(
+                x=X_mesh, y=Y_mesh, z=Z_mesh,
+                colorscale='Jet', opacity=0.9,
+                colorbar=dict(title='Radio f(x)')
+            )
+            layout_title = "Sólido de Revolución (Rotación en X)"
+            y_title = "Eje Y"
+            z_title = "Eje Z"
 
-        # --- RESULTADOS ---
+        else:
+            # --- MODO NORMAL: SÁBANA EXTRUIDA (TU GRÁFICO FAVORITO) ---
+            # Profundidad decorativa
+            y_vals = np.linspace(0, 10, 50) 
+            X_mesh, Y_mesh = np.meshgrid(x_plot, y_vals)
+            Z_mesh = np.tile(z_plot, (len(y_vals), 1))
+            
+            surface = go.Surface(
+                x=X_mesh, y=Y_mesh, z=Z_mesh,
+                colorscale='Jet', opacity=0.9,
+                colorbar=dict(title='f(x)')
+            )
+            layout_title = "Visualización 3D Extruida"
+            y_title = "Profundidad (Decorativa)"
+            z_title = "Altura f(x)"
+
+        # --- D. MOSTRAR RESULTADOS ---
         col_res_txt, col_res_graph = st.columns([1, 2])
         
         with col_res_txt:
             st.success("✅ Cálculo Exitoso")
-            # Mostramos el resultado con formato de miles (,)
-            st.metric("Resultado Exacto", f"{area_val:,.4f}")
-            st.info("El cálculo ahora se realiza sobre el intervalo exacto [a, b] para máxima precisión.")
+            st.metric(label_res, f"{integral_val:,.4f}")
+            if modo_revolucion:
+                st.caption("La función ha girado 360° sobre el eje X.")
 
         with col_res_graph:
-            fig = go.Figure(data=[go.Surface(
-                z=Z_mesh,
-                x=X_mesh,
-                y=Y_mesh,
-                colorscale='Jet', 
-                colorbar=dict(title='f(x)'),
-                opacity=0.9
-            )])
-
+            fig = go.Figure(data=[surface])
             fig.update_layout(
-                title="Visualización 3D de f(x)",
+                title=layout_title,
                 scene=dict(
                     xaxis_title='Eje X',
-                    yaxis_title='Profundidad',
-                    zaxis_title='Altura f(x)',
-                    aspectmode='cube'
+                    yaxis_title=y_title,
+                    zaxis_title=z_title,
+                    aspectmode='data' # Proporción real para ver bien el sólido
                 ),
-                height=500,
+                height=550,
                 margin=dict(l=0, r=0, b=0, t=40)
             )
             st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
-        st.error(f"❌ Error en la fórmula: {e}")
+        st.error(f"❌ Error: {e}")
+        st.warning("Verifica paréntesis y multiplicaciones (ej: 0.0006 * x)")
