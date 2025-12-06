@@ -46,7 +46,7 @@ except ImportError:
 
 # --- 3. LÓGICA DE MEMORIA ---
 if 'user_expression' not in st.session_state:
-    st.session_state.user_expression = "x^(3/2)" # Ejemplo por defecto corregido visualmente
+    st.session_state.user_expression = "x^(3/2)" # Ejemplo por defecto corregido
 
 # Variables de estado para resultados
 if 'result_ready' not in st.session_state:
@@ -75,20 +75,25 @@ def realizar_calculo(formula, a, b, es_volumen):
         # 1. Rango matemático preciso (2000 puntos para precisión)
         x_math = np.linspace(a, b, 2000)
         
-        # 2. Contexto matemático
+        # 2. Contexto matemático robusto
         ctx = {
             "x": x_math, "sin": np.sin, "cos": np.cos, "tan": np.tan,
             "sqrt": np.sqrt, "log": np.log, "exp": np.exp, "pi": np.pi, "e": np.e, "abs": np.abs
         }
         
-        # 3. LIMPIEZA INTELIGENTE
+        # 3. LIMPIEZA Y TRADUCCIÓN
         # Reemplazamos el ^ visual por el ** de Python
         f_clean = formula.replace("^", "**")
         
         # Evaluamos
         # Usamos nan_to_num para convertir errores (raíces negativas) en 0 y no romper la app
         y_math = eval(f_clean, {"__builtins__": None}, ctx)
-        y_math = np.nan_to_num(y_math, nan=0.0, posinf=0.0, neginf=0.0)
+        
+        # Si el resultado es complejo (ej: raiz de negativo), tomamos solo la parte real o 0
+        if np.iscomplexobj(y_math):
+             y_math = np.nan_to_num(y_math.real, nan=0.0)
+        else:
+             y_math = np.nan_to_num(y_math, nan=0.0)
         
         # 4. Cálculo
         if es_volumen:
@@ -104,7 +109,10 @@ def realizar_calculo(formula, a, b, es_volumen):
             x_solid = np.linspace(a, b, 80)
             ctx["x"] = x_solid
             y_solid = eval(f_clean, {"__builtins__": None}, ctx)
-            y_solid = np.nan_to_num(y_solid, nan=0.0) # Protección contra errores en gráfico
+            
+            # Limpieza para gráfico
+            if np.iscomplexobj(y_solid): y_solid = np.nan_to_num(y_solid.real, nan=0.0)
+            else: y_solid = np.nan_to_num(y_solid, nan=0.0)
             
             theta = np.linspace(0, 2*np.pi, 60)
             X_m, T_m = np.meshgrid(x_solid, theta)
@@ -140,7 +148,9 @@ def realizar_calculo(formula, a, b, es_volumen):
             x_plot = np.linspace(a, b, 100)
             ctx["x"] = x_plot
             y_plot = eval(f_clean, {"__builtins__": None}, ctx)
-            y_plot = np.nan_to_num(y_plot, nan=0.0)
+            # Limpieza
+            if np.iscomplexobj(y_plot): y_plot = np.nan_to_num(y_plot.real, nan=0.0)
+            else: y_plot = np.nan_to_num(y_plot, nan=0.0)
             
             y_fake = np.linspace(0, 4, 20)
             X_m, Y_m = np.meshgrid(x_plot, y_fake)
@@ -153,7 +163,8 @@ def realizar_calculo(formula, a, b, es_volumen):
             x_line = np.linspace(a - margin, b + margin, 150)
             ctx["x"] = x_line
             y_line = eval(f_clean, {"__builtins__": None}, ctx)
-            y_line = np.nan_to_num(y_line, nan=0.0)
+            if np.iscomplexobj(y_line): y_line = np.nan_to_num(y_line.real, nan=0.0)
+            else: y_line = np.nan_to_num(y_line, nan=0.0)
             
             line_trace = go.Scatter3d(x=x_line, y=np.zeros_like(x_line), z=y_line, mode='lines', line=dict(color='white', width=5), name='Función f(x)')
             
@@ -190,7 +201,7 @@ with col1:
     c2.button("DEL", on_click=delete, use_container_width=True)
     c3.button("(", on_click=add, args=("(",), use_container_width=True)
     c4.button(")", on_click=add, args=(")",), use_container_width=True)
-    # CAMBIO IMPORTANTE: Ahora el botón escribe ^, no **
+    # EL BOTÓN AÑADE EL SÍMBOLO VISUAL '^'
     c5.button("^", on_click=add, args=("^",), use_container_width=True)
 
     c6, c7, c8, c9, c10 = st.columns(5)
@@ -237,7 +248,7 @@ with col2:
     with st.container(border=True):
         st.markdown("**Límites**")
         cx, cy = st.columns(2)
-        # Valores por defecto seguros
+        # Valores por defecto
         lim_a = cx.number_input("Desde (a)", value=0.0, step=1.0)
         lim_b = cy.number_input("Hasta (b)", value=4.0, step=1.0)
     
@@ -272,4 +283,4 @@ if st.session_state.result_ready:
         
     with r2:
         if st.session_state.fig_storage:
-            st.plotly_chart(st.session_state.fig_storage, use_container_width=True)
+                        st.plotly_chart(st.session_state.fig_storage, use_container_width=True)
